@@ -1,0 +1,91 @@
+def file = "open-ticket-details.json"
+
+
+pipeline {
+    // agent can be updated based on machine
+    agent any
+
+    stages {
+
+        stage('CheckOpenIsseus') {
+            steps {
+                script{
+                    sh 'set +x && python3 app/open-ticket.py'
+                }
+            }
+        }
+        stage('Core-Operation') {
+            steps {
+                script{
+                    if (fileExists("app/${file}")) {
+                        // echo "[${file}] found in ${env.WORKSPACE}"
+                        echo "[${file}] found in Workspace"
+                        def props = readJSON file: "app/${file}"
+
+                        for(i = 0; i < props.size(); i++) {
+                            //print(props[i]["username"])
+                            def USERNAME = props[i]["username"]
+                            def TICKET = props[i]["key"]
+
+                            // Set this variable which should match with the user in credentials
+                            def schema = USERNAME
+                            def credential_id = ""
+                            def creds = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(com.cloudbees.plugins.credentials.common.StandardCredentials.class, Jenkins.instance)
+                            def instance = creds.findResult { it.id == schema ? it : null }
+
+                            if(instance){
+                                echo "[${schema}] found in credentials store"
+                                credential_id = schema
+                                withCredentials([string(credentialsId: "${credential_id}", variable: 'SECRET')]) { 
+                                    TOKEN = """${SECRET}"""
+                                }
+
+                                // sh """python3 app/main.py -token ${TOKEN} -ticket ${ticket}"""
+                                sh(script: "set +x && python3 app/main.py -ticket ${TICKET} -username ${USERNAME} -token ${TOKEN}", returnStdout: false)
+
+                            } else {
+                                echo "[${schema}] not found in credentials store"
+                            }
+                        }
+                    } else {
+                        echo "[${file}] not found in ${env.WORKSPACE}"
+                    }
+                }
+            }
+        }
+
+        // stage('CoreOperation') {
+        //     steps {
+        //         script{
+        //             echo "${schema}"
+        //             // build the docker image
+        //             // sh "docker build -t jiraautomation:${BUILD_NUMBER} app/."
+        //         }
+        //     }
+        // }
+
+        // stage('Test') {
+        //     steps {
+        //         script {
+        //             
+        //             withCredentials([string(credentialsId: 'ar-rohan.das', variable: 'SECRET')]) { 
+        //                 //set SECRET with the credential content
+        //                 TOKEN = """${SECRET}"""
+        //             }
+        //             sh "docker run -e 'SOURCE=SWRSREOPE-4481' -e 'TOKEN=${TOKEN}' -e 'DEST=CUS-31' --name jiraautomation jiraautomation:${BUILD_NUMBER}"
+        //         }
+        //     }
+        // }
+
+        // stage('Remove'){
+        //     steps {
+        //         script {
+        //             // clear the environment
+        //             sh "docker stop jiraautomation"
+        //             sh "docker rm jiraautomation"
+        //             sh "docker rmi jiraautomation:${BUILD_NUMBER}"
+        //         }
+        //     }
+        // }
+    }
+}
